@@ -86,6 +86,23 @@ func WithCodes(retryCodes ...codes.Code) CallOption {
 	}}
 }
 
+type CodeWithMsg struct {
+	code codes.Code
+	msg  string
+}
+
+// WithCodesAndMatchingMessage sets wich codes with a matching message should be retried.
+//
+// These codes with matching message are overwritten by the codes that are set by WithCodes.
+// Please *use with care*, as you may be retrying non-idempotent calls.
+//
+// You cannot automatically retry on Cancelled and Deadline, please use `WithPerRetryTimeout` for these.
+func WithCodesAndMatchingMessage(retryCodes ...CodeWithMsg) CallOption {
+	return CallOption{applyFunc: func(o *options) {
+		o.codesWithDesc = retryCodes
+	}}
+}
+
 // WithPerRetryTimeout sets the RPC timeout per call (including initial call) on this call, or this interceptor.
 //
 // The context.Deadline of the call takes precedence and sets the maximum time the whole invocation
@@ -109,6 +126,7 @@ type options struct {
 	perCallTimeout time.Duration
 	includeHeader  bool
 	codes          []codes.Code
+	codesWithDesc  []CodeWithMsg
 	backoffFunc    BackoffFuncContext
 }
 
