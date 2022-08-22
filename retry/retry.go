@@ -209,7 +209,7 @@ func (s *serverStreamingRetryingStream) RecvMsg(m interface{}) error {
 
 func (s *serverStreamingRetryingStream) receiveMsgAndIndicateRetry(m interface{}) (bool, error) {
 	err := s.getStream().RecvMsg(m)
-	if err == nil || err == io.EOF {
+	if err == nil || (err == io.EOF && !s.callOpts.ignoreEOF) {
 		return false, err
 	}
 	if isContextError(err) {
@@ -285,7 +285,9 @@ func isRetriable(err error, callOpts *options) bool {
 			return true
 		}
 	}
-
+	if err == io.EOF && callOpts.ignoreEOF {
+		return true
+	}
 	return false
 }
 

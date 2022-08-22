@@ -23,6 +23,7 @@ var (
 		perCallTimeout: 0, // disabled
 		includeHeader:  true,
 		codes:          DefaultRetriableCodes,
+		ignoreEOF:      false,
 		backoffFunc: BackoffFuncContext(func(ctx context.Context, attempt uint) time.Duration {
 			return BackoffLinearWithJitter(50*time.Millisecond /*jitter*/, 0.10)(attempt)
 		}),
@@ -91,7 +92,7 @@ type CodeWithMsg struct {
 	Msg  string
 }
 
-// WithCodesAndMatchingMessage sets wich codes with a matching message should be retried.
+// WithCodesAndMatchingMessage sets which codes with a matching message should be retried.
 //
 // These codes with matching message are overwritten by the codes that are set by WithCodes.
 // Please *use with care*, as you may be retrying non-idempotent calls.
@@ -100,6 +101,13 @@ type CodeWithMsg struct {
 func WithCodesAndMatchingMessage(retryCodes ...CodeWithMsg) CallOption {
 	return CallOption{applyFunc: func(o *options) {
 		o.codesWithDesc = retryCodes
+	}}
+}
+
+// WithIgnoreEOF ignores the server side close and even retries if the stream got an io.EOF error.
+func WithIgnoreEOF() CallOption {
+	return CallOption{applyFunc: func(o *options) {
+		o.ignoreEOF = true
 	}}
 }
 
@@ -125,6 +133,7 @@ type options struct {
 	max            uint
 	perCallTimeout time.Duration
 	includeHeader  bool
+	ignoreEOF      bool
 	codes          []codes.Code
 	codesWithDesc  []CodeWithMsg
 	backoffFunc    BackoffFuncContext
