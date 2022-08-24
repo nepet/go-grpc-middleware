@@ -24,6 +24,7 @@ var (
 		includeHeader:  true,
 		codes:          DefaultRetriableCodes,
 		ignoreEOF:      false,
+		alwaysRetry:    false,
 		backoffFunc: BackoffFuncContext(func(ctx context.Context, attempt uint) time.Duration {
 			return BackoffLinearWithJitter(50*time.Millisecond /*jitter*/, 0.10)(attempt)
 		}),
@@ -111,6 +112,13 @@ func WithIgnoreEOF() CallOption {
 	}}
 }
 
+// WithAlwaysRetry will always retry except the error is due to a client side initiated disconnect.
+func WithAlwaysRetry() CallOption {
+	return CallOption{applyFunc: func(o *options) {
+		o.alwaysRetry = true
+	}}
+}
+
 // WithPerRetryTimeout sets the RPC timeout per call (including initial call) on this call, or this interceptor.
 //
 // The context.Deadline of the call takes precedence and sets the maximum time the whole invocation
@@ -134,6 +142,7 @@ type options struct {
 	perCallTimeout time.Duration
 	includeHeader  bool
 	ignoreEOF      bool
+	alwaysRetry    bool
 	codes          []codes.Code
 	codesWithDesc  []CodeWithMsg
 	backoffFunc    BackoffFuncContext
