@@ -46,16 +46,16 @@ func UnaryClientInterceptor(optFuncs ...CallOption) grpc.UnaryClientInterceptor 
 			if lastErr == nil {
 				return nil
 			}
-			logTrace(parentCtx, "grpc_retry attempt: %d, got err: %v", attempt, lastErr)
+			logAndTrace(parentCtx, callOpts, "grpc_retry attempt: %d, got err: %v", attempt, lastErr)
 			if isContextError(lastErr) {
 				if parentCtx.Err() != nil {
-					logTrace(parentCtx, "grpc_retry attempt: %d, parent context error: %v", attempt, parentCtx.Err())
+					logAndTrace(parentCtx, callOpts, "grpc_retry attempt: %d, parent context error: %v", attempt, parentCtx.Err())
 					// its the parent context deadline or cancellation.
 					return lastErr
 				} else if callOpts.perCallTimeout != 0 {
 					// We have set a perCallTimeout in the retry middleware, which would result in a context error if
 					// the deadline was exceeded, in which case try again.
-					logTrace(parentCtx, "grpc_retry attempt: %d, context error from retry call", attempt)
+					logAndTrace(parentCtx, callOpts, "grpc_retry attempt: %d, context error from retry call", attempt)
 					continue
 				}
 			}
@@ -109,16 +109,16 @@ func StreamClientInterceptor(optFuncs ...CallOption) grpc.StreamClientIntercepto
 				return retryingStreamer, nil
 			}
 
-			logTrace(parentCtx, "grpc_retry attempt: %d, got err: %v", attempt, lastErr)
+			logAndTrace(parentCtx, callOpts, "grpc_retry attempt: %d, got err: %v", attempt, lastErr)
 			if isContextError(lastErr) {
 				if parentCtx.Err() != nil {
-					logTrace(parentCtx, "grpc_retry attempt: %d, parent context error: %v", attempt, parentCtx.Err())
+					logAndTrace(parentCtx, callOpts, "grpc_retry attempt: %d, parent context error: %v", attempt, parentCtx.Err())
 					// its the parent context deadline or cancellation.
 					return nil, lastErr
 				} else if callOpts.perCallTimeout != 0 {
 					// We have set a perCallTimeout in the retry middleware, which would result in a context error if
 					// the deadline was exceeded, in which case try again.
-					logTrace(parentCtx, "grpc_retry attempt: %d, context error from retry call", attempt)
+					logAndTrace(parentCtx, callOpts, "grpc_retry attempt: %d, context error from retry call", attempt)
 					continue
 				}
 			}
@@ -214,12 +214,12 @@ func (s *serverStreamingRetryingStream) receiveMsgAndIndicateRetry(m interface{}
 	}
 	if isContextError(err) {
 		if s.parentCtx.Err() != nil {
-			logTrace(s.parentCtx, "grpc_retry parent context error: %v", s.parentCtx.Err())
+			logAndTrace(s.parentCtx, s.callOpts, "grpc_retry parent context error: %v", s.parentCtx.Err())
 			return false, err
 		} else if s.callOpts.perCallTimeout != 0 {
 			// We have set a perCallTimeout in the retry middleware, which would result in a context error if
 			// the deadline was exceeded, in which case try again.
-			logTrace(s.parentCtx, "grpc_retry context error from retry call")
+			logAndTrace(s.parentCtx, s.callOpts, "grpc_retry context error from retry call")
 			return true, err
 		}
 	}
@@ -234,17 +234,17 @@ func (s *serverStreamingRetryingStream) reestablishStreamAndResendBuffer(
 	s.mu.RUnlock()
 	newStream, err := s.streamerCall(callCtx)
 	if err != nil {
-		logTrace(callCtx, "grpc_retry failed redialing new stream: %v", err)
+		logAndTrace(callCtx, s.callOpts, "grpc_retry failed redialing new stream: %v", err)
 		return nil, err
 	}
 	for _, msg := range bufferedSends {
 		if err := newStream.SendMsg(msg); err != nil {
-			logTrace(callCtx, "grpc_retry failed resending message: %v", err)
+			logAndTrace(callCtx, s.callOpts, "grpc_retry failed resending message: %v", err)
 			return nil, err
 		}
 	}
 	if err := newStream.CloseSend(); err != nil {
-		logTrace(callCtx, "grpc_retry failed CloseSend on new stream %v", err)
+		logAndTrace(callCtx, s.callOpts, "grpc_retry failed CloseSend on new stream %v", err)
 		return nil, err
 	}
 	return newStream, nil
@@ -257,6 +257,7 @@ func waitRetryBackoff(attempt uint, parentCtx context.Context, callOpts *options
 	}
 	if waitTime > 0 {
 		logTrace(parentCtx, "grpc_retry attempt: %d, backoff for %v", attempt, waitTime)
+		optLog(callOpts, "grpc_retry attempt: %d, backoff for %v", attempt, waitTime)
 		timer := time.NewTimer(waitTime)
 		select {
 		case <-parentCtx.Done():
@@ -322,10 +323,21 @@ func contextErrToGrpcErr(err error) error {
 	}
 }
 
+func logAndTrace(ctx context.Context, callOpts *options, format string, a ...interface{}) {
+	logTrace(ctx, format, a...)
+	optLog(callOpts, format, a...)
+}
+
 func logTrace(ctx context.Context, format string, a ...interface{}) {
 	tr, ok := trace.FromContext(ctx)
 	if !ok {
 		return
 	}
 	tr.LazyPrintf(format, a...)
+}
+
+func optLog(callOpts *options, format string, a ...interface{}) {
+	if callOpts.logger != nil {
+		callOpts.logger.Printf(format, a...)
+	}
 }

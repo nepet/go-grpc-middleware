@@ -5,6 +5,7 @@ package grpc_retry
 
 import (
 	"context"
+	"log"
 	"time"
 
 	"google.golang.org/grpc"
@@ -137,6 +138,14 @@ func WithPerRetryTimeout(timeout time.Duration) CallOption {
 	}}
 }
 
+// WithLogger adds a logger to the middleware that is used for logs. No logs are written if no logger
+// is provided.
+func WithLogger(logger *log.Logger) CallOption {
+	return CallOption{applyFunc: func(o *options) {
+		o.logger = logger
+	}}
+}
+
 type options struct {
 	max            uint
 	perCallTimeout time.Duration
@@ -146,6 +155,7 @@ type options struct {
 	codes          []codes.Code
 	codesWithDesc  []CodeWithMsg
 	backoffFunc    BackoffFuncContext
+	logger         *log.Logger
 }
 
 // CallOption is a grpc.CallOption that is local to grpc_retry.
